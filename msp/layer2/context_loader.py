@@ -64,12 +64,14 @@ class ContextLoader:
         self,
         stage: str | None = None,
         token_budget: int = 8000,
+        extra_paths: list[Path] | None = None,
     ) -> ContextBundle:
         """Load context for an agent round.
 
         Args:
             stage: stage name (e.g. "01-research"). None = routing only.
             token_budget: max tokens to deliver (maps to markspace P61).
+            extra_paths: optional list of Path objects to inject into references (Layer 5 CARL integration).
         """
         bundle = ContextBundle()
 
@@ -92,6 +94,13 @@ class ContextLoader:
             remaining = token_budget - bundle.total_tokens()
             if remaining > 0 and bundle.layer2:
                 self._load_inputs(bundle, stage, remaining)
+
+        # Extra paths injected by CARL (Layer 5)
+        if extra_paths:
+            for path in extra_paths:
+                if path.exists():
+                    text = path.read_text(encoding="utf-8")
+                    bundle.references.append(text)
 
         return bundle
 
