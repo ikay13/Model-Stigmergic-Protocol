@@ -38,6 +38,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
+# Git worktrees
+.worktrees/
+
 review/
 demo/
 markspace-ts/
