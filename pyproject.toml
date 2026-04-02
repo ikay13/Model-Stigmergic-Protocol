@@ -32,6 +32,9 @@ Repository = "https://github.com/opinionated-systems/markspace"
 Issues = "https://github.com/opinionated-systems/markspace/issues"
 Documentation = "https://github.com/opinionated-systems/markspace/tree/main/docs"
 
+[project.scripts]
+msp = "msp.cli:main"
+
 [project.optional-dependencies]
 test = [
     "pytest>=7.0",
