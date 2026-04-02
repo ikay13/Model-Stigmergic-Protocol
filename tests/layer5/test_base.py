@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from hypothesis import given, strategies as st, settings, HealthCheck
 
 from msp.layer5.base import WorkspaceState, DriftItem
 
@@ -129,3 +130,26 @@ def test_detect_drift_no_mark_when_no_drift(tmp_path):
     ms.write.reset_mock()
     state.detect_drift()
     assert not ms.write.called
+
+
+@given(recorded=st.integers(min_value=0, max_value=20),
+       live=st.integers(min_value=0, max_value=20))
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture])
+def test_drift_detected_whenever_counts_differ(tmp_path, recorded, live):
+    """detect_drift() always returns a DriftItem when counts differ."""
+    from unittest.mock import MagicMock
+    from markspace import Intent
+    ms = MagicMock()
+    mock_intents = [MagicMock(spec=Intent) for _ in range(live)]
+    ms.read.return_value = mock_intents
+    state = WorkspaceState(
+        project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=MagicMock()
+    )
+    state.save({"active_intents": recorded})
+    ms.write.reset_mock()
+    items = state.detect_drift()
+    if recorded != live:
+        assert len(items) == 1
+        assert items[0].key == "active_intents"
+    else:
+        assert items == []
