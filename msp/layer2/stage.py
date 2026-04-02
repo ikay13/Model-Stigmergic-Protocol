@@ -13,6 +13,8 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from msp.layer2._constants import TOKENS_PER_CHAR
+
 
 @dataclass
 class StageInput:
@@ -36,7 +38,7 @@ class StageContract:
     process_steps: list[str] = field(default_factory=list)
     outputs: list[StageOutput] = field(default_factory=list)
 
-    TOKENS_PER_CHAR = 0.25
+    TOKENS_PER_CHAR = TOKENS_PER_CHAR
 
     @classmethod
     def from_file(cls, path: Path) -> "StageContract":

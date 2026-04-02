@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from msp.layer2._constants import TOKENS_PER_CHAR
 from msp.layer2.stage import StageContract
 from msp.layer2.workspace import Workspace
 
@@ -27,7 +28,7 @@ class ContextBundle:
     references: list[str] = field(default_factory=list)
     artifacts: list[str] = field(default_factory=list)
 
-    TOKENS_PER_CHAR = 0.25
+    TOKENS_PER_CHAR = TOKENS_PER_CHAR
 
     def _estimate(self, text: str) -> int:
         return int(len(text) * self.TOKENS_PER_CHAR)
@@ -98,7 +99,6 @@ class ContextLoader:
         self, bundle: ContextBundle, stage: str, budget: int
     ) -> None:
         """Load Layer 3/4 inputs declared in the stage contract."""
-        TOKENS_PER_CHAR = 0.25
         stage_path = self.workspace.root / "stages" / stage
         used = 0
 

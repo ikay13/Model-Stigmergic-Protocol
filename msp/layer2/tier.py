@@ -7,11 +7,13 @@ L2: full content — deep read when necessary
 """
 from pathlib import Path
 
+from msp.layer2._constants import TOKENS_PER_CHAR
+
 
 class TieredContent:
     """Provides L0/L1/L2 access to a file's content."""
 
-    TOKENS_PER_CHAR = 0.25  # approximation: 1 token ≈ 4 chars
+    TOKENS_PER_CHAR = TOKENS_PER_CHAR  # approximation: 1 token ≈ 4 chars
 
     def __init__(self, path: Path) -> None:
         self.path = path
