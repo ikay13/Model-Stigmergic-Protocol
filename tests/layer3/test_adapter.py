@@ -67,3 +67,89 @@ def test_concrete_adapter_works():
     round_ = AgentRound(context="ctx", uri=uri, instructions="go")
     resp = adapter.run_round(round_)
     assert resp.raw_text == "mock response"
+
+
+# --- ClaudeAdapter tests ---
+
+from unittest.mock import patch
+from msp.layer3.adapters.claude import ClaudeAdapter
+from markspace.llm import LLMConfig
+
+
+def _mock_llm_response(text: str) -> dict:
+    """Build a minimal OpenAI-format LLM response."""
+    return {
+        "choices": [{"message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+    }
+
+
+def test_claude_adapter_provider_name():
+    """ClaudeAdapter reports provider_name as 'claude'."""
+    config = LLMConfig.anthropic(api_key="test-key", model="claude-sonnet-4-6")
+    adapter = ClaudeAdapter(config=config)
+    assert adapter.provider_name == "claude"
+
+
+def test_claude_adapter_parses_json_observations():
+    """ClaudeAdapter parses JSON observations from LLM response."""
+    config = LLMConfig.anthropic(api_key="test-key", model="claude-sonnet-4-6")
+    adapter = ClaudeAdapter(config=config)
+
+    json_response = '''{
+  "observations": [
+    {"topic": "progress", "content": {"status": "on track"}, "confidence": 0.85}
+  ],
+  "needs": [],
+  "reasoning": "The workspace context shows work is progressing normally."
+}'''
+
+    uri = AgentURI.parse("agent://ikay13/planning/architect/claude-01")
+    round_ = AgentRound(context="# Workspace", uri=uri, instructions="Assess progress.")
+
+    with patch.object(adapter._client, "chat", return_value=_mock_llm_response(json_response)):
+        resp = adapter.run_round(round_)
+
+    assert len(resp.observations) == 1
+    assert resp.observations[0]["topic"] == "progress"
+    assert resp.observations[0]["confidence"] == 0.85
+    assert resp.needs == []
+    assert "on track" in resp.raw_text
+
+
+def test_claude_adapter_parses_needs():
+    """ClaudeAdapter parses needs from LLM response."""
+    config = LLMConfig.anthropic(api_key="test-key", model="claude-sonnet-4-6")
+    adapter = ClaudeAdapter(config=config)
+
+    json_response = '''{
+  "observations": [],
+  "needs": ["Should we proceed with Stage 03 now?"],
+  "reasoning": "Stage 02 is complete but I need direction on timing."
+}'''
+
+    uri = AgentURI.parse("agent://ikay13/planning/architect/claude-01")
+    round_ = AgentRound(context="ctx", uri=uri, instructions="What next?")
+
+    with patch.object(adapter._client, "chat", return_value=_mock_llm_response(json_response)):
+        resp = adapter.run_round(round_)
+
+    assert resp.needs == ["Should we proceed with Stage 03 now?"]
+    assert resp.observations == []
+
+
+def test_claude_adapter_handles_malformed_json():
+    """ClaudeAdapter returns raw text when LLM response is not valid JSON."""
+    config = LLMConfig.anthropic(api_key="test-key", model="claude-sonnet-4-6")
+    adapter = ClaudeAdapter(config=config)
+
+    uri = AgentURI.parse("agent://ikay13/planning/architect/claude-01")
+    round_ = AgentRound(context="ctx", uri=uri, instructions="go")
+
+    with patch.object(adapter._client, "chat", return_value=_mock_llm_response("Not valid JSON at all.")):
+        resp = adapter.run_round(round_)
+
+    # Graceful degradation: no observations/needs, raw text preserved
+    assert resp.observations == []
+    assert resp.needs == []
+    assert resp.raw_text == "Not valid JSON at all."
