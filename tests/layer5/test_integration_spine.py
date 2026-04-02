@@ -49,6 +49,7 @@ def test_full_spine_plan_emit_inject_validate(project_root):
     mock_intent = MagicMock(spec=Intent)
     mock_intent.action = "implement the feature"
     mock_intent.resource = "m1"
+    mock_intent.created_at = 0.0
     ms.read.return_value = [mock_intent]
 
     loader = MagicMock()

@@ -9,6 +9,7 @@ Marks emitted:
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from markspace import Agent, Intent, MarkSpace, Observation, Source
@@ -47,12 +48,14 @@ class ContextAugmentation:
         rules_dir: Path | None = None,
         agent: Agent | None = None,
         scope: str = "paul",
+        max_age: float = 3600.0,
     ) -> None:
         self.markspace = markspace
         self.loader = loader
         self.rules_dir = rules_dir or (Path(__file__).parent / "rules")
         self.agent = agent
         self.scope = scope
+        self.max_age = max_age
 
     def _score_domains(self, marks: list) -> dict[str, int]:
         """Score each domain against mark content. Returns domain → score dict."""
@@ -85,7 +88,12 @@ class ContextAugmentation:
         emits an Observation mark, and returns an augmented session config.
         """
         marks = self.markspace.read(scope=self.scope)
-        intent_marks = [m for m in marks if isinstance(m, Intent)]
+        cutoff = time.time() - self.max_age
+        intent_marks = [
+            m for m in marks
+            if isinstance(m, Intent)
+            and (m.created_at == 0.0 or m.created_at > cutoff)
+        ]
         domains = self.detect_domains(intent_marks)
         rule_paths = self.load_rules(domains)
 
