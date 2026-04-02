@@ -121,7 +121,7 @@ class VaultSync:
             Number of marks exported.
         """
         marks = self.mark_space.read(scope=read_scope, mark_type=None)
-        observations = [m for m in marks if type(m).__name__ == "Observation"]
+        observations = [m for m in marks if isinstance(m, Observation)]
 
         if not observations:
             return 0
