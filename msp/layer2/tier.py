@@ -32,12 +32,10 @@ class TieredContent:
         overview = self.path.parent / ".overview"
         if overview.exists():
             return overview.read_text().strip()
-        # fall back: full content if under 2k tokens
         content = self.path.read_text()
-        if self.token_estimate(content) <= 2000:
+        limit = int(2000 / self.TOKENS_PER_CHAR)  # 8000 chars
+        if len(content) <= limit:
             return content
-        # truncate to ~2k tokens
-        limit = int(2000 / self.TOKENS_PER_CHAR)
         return content[:limit]
 
     def l2(self) -> str:

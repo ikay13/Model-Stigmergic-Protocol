@@ -58,3 +58,13 @@ def test_token_estimate(tmp_path):
     doc.write_text("a" * 400)
     tc = TieredContent(doc)
     assert tc.token_estimate(doc.read_text()) == 100
+
+
+def test_l1_truncates_large_content(tmp_path):
+    """L1 truncates content over 2k tokens to exactly 8000 chars."""
+    doc = tmp_path / "large.md"
+    doc.write_text("x" * 10000)  # 2500 tokens — over limit
+
+    tc = TieredContent(doc)
+    result = tc.l1()
+    assert len(result) == 8000  # 2000 tokens * 4 chars/token
