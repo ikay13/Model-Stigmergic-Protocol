@@ -136,3 +136,113 @@ def test_import_tagged_empty_directory(tmp_path):
     syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent)
     count = syncer.import_tagged(directory="MSP", tag="msp")
     assert count == 0
+
+
+# --- VaultSync.export_observations tests ---
+
+import yaml as _yaml
+from markspace import Observation, Source
+
+
+def _make_export_space_and_agent():
+    """MarkSpace with an 'msp' scope for agent observations."""
+    scope = Scope(
+        name="msp",
+        observation_topics=["*"],
+        decay=DecayConfig(
+            observation_half_life=3600.0,
+            warning_half_life=3600.0,
+            intent_ttl=1800.0,
+        ),
+    )
+    space = MarkSpace(scopes=[scope])
+    agent = Agent(name="test-agent", scopes={"msp": ["observation"]})
+    return space, agent
+
+
+def _write_observation(space, agent, topic, content, confidence=0.9):
+    space.write(
+        agent,
+        Observation(
+            scope="msp",
+            topic=topic,
+            content=content,
+            confidence=confidence,
+            source=Source.FLEET,
+        ),
+    )
+
+
+def test_export_observations_writes_files(tmp_path):
+    """export_observations writes one markdown file per observation."""
+    vault = tmp_path / "vault"
+    (vault / "MSP" / "agent-output").mkdir(parents=True)
+    space, agent = _make_export_space_and_agent()
+    _write_observation(space, agent, "progress", {"status": "on track"})
+
+    syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent, scope="vault")
+    count = syncer.export_observations(read_scope="msp")
+
+    assert count == 1
+    output_files = list((vault / "MSP" / "agent-output").glob("*.md"))
+    assert len(output_files) == 1
+
+
+def test_export_observations_frontmatter_tags(tmp_path):
+    """Exported files are tagged with #msp-agent-output."""
+    vault = tmp_path / "vault"
+    (vault / "MSP" / "agent-output").mkdir(parents=True)
+    space, agent = _make_export_space_and_agent()
+    _write_observation(space, agent, "progress", {"status": "ok"})
+
+    syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent, scope="vault")
+    syncer.export_observations(read_scope="msp")
+
+    output_file = list((vault / "MSP" / "agent-output").glob("*.md"))[0]
+    text = output_file.read_text()
+    fm, _ = _parse_frontmatter(text)
+    assert "msp-agent-output" in fm["tags"]
+
+
+def test_export_observations_content_in_body(tmp_path):
+    """Exported file body contains the observation topic and content."""
+    vault = tmp_path / "vault"
+    (vault / "MSP" / "agent-output").mkdir(parents=True)
+    space, agent = _make_export_space_and_agent()
+    _write_observation(space, agent, "progress", {"status": "on track", "detail": "all good"})
+
+    syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent, scope="vault")
+    syncer.export_observations(read_scope="msp")
+
+    output_file = list((vault / "MSP" / "agent-output").glob("*.md"))[0]
+    body = output_file.read_text()
+    assert "progress" in body
+    assert "on track" in body
+
+
+def test_export_observations_overwrites_existing(tmp_path):
+    """export_observations overwrites existing files for the same mark id."""
+    vault = tmp_path / "vault"
+    (vault / "MSP" / "agent-output").mkdir(parents=True)
+    space, agent = _make_export_space_and_agent()
+    _write_observation(space, agent, "progress", {"status": "first"})
+
+    syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent, scope="vault")
+
+    # Export twice — should still be 1 file
+    syncer.export_observations(read_scope="msp")
+    syncer.export_observations(read_scope="msp")
+
+    output_files = list((vault / "MSP" / "agent-output").glob("*.md"))
+    assert len(output_files) == 1
+
+
+def test_export_observations_no_marks(tmp_path):
+    """export_observations returns 0 when no marks exist."""
+    vault = tmp_path / "vault"
+    (vault / "MSP" / "agent-output").mkdir(parents=True)
+    space, agent = _make_export_space_and_agent()
+
+    syncer = VaultSync(vault_root=vault, mark_space=space, agent=agent, scope="vault")
+    count = syncer.export_observations(read_scope="msp")
+    assert count == 0

@@ -103,3 +103,53 @@ class VaultSync:
             count += 1
 
         return count
+
+    def export_observations(self, read_scope: str) -> int:
+        """Export Observation marks to vault markdown files.
+
+        Reads all Observation marks from `read_scope` and writes each as a
+        markdown file under `vault_root/MSP/agent-output/`. Files are named
+        by mark ID so re-running overwrites rather than accumulates.
+
+        Each file gets frontmatter with tags: [msp-agent-output] and a body
+        showing the topic, confidence, and content.
+
+        Args:
+            read_scope: The mark space scope to read observations from.
+
+        Returns:
+            Number of marks exported.
+        """
+        marks = self.mark_space.read(scope=read_scope, mark_type=None)
+        observations = [m for m in marks if type(m).__name__ == "Observation"]
+
+        if not observations:
+            return 0
+
+        output_dir = self.vault_root / "MSP" / "agent-output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        for obs in observations:
+            content_lines = [f"- **{k}:** {v}" for k, v in obs.content.items()]
+            body = "\n".join([
+                f"# {obs.topic}",
+                "",
+                f"**Confidence:** {obs.confidence}",
+                "",
+                "## Content",
+                "",
+                *content_lines,
+            ])
+            fm = {
+                "tags": ["msp-agent-output"],
+                "topic": obs.topic,
+                "confidence": obs.confidence,
+                "exported_at": datetime.datetime.utcnow().isoformat(),
+            }
+            fm_text = yaml.dump(fm, default_flow_style=False).strip()
+            file_text = f"---\n{fm_text}\n---\n\n{body}\n"
+
+            out_file = output_dir / f"{obs.id}.md"
+            out_file.write_text(file_text, encoding="utf-8")
+
+        return len(observations)
