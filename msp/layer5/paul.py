@@ -198,6 +198,44 @@ class PlanApplyUnify:
 
         return summary
 
+    def qualify(self, task: Task, result: Any) -> QualifyVerdict:
+        """Check that result's observations cover all expected_outputs for the task."""
+        if not task.expected_outputs:
+            return QualifyVerdict(passed=True)
+        observed_topics = {obs.get("topic", "") for obs in getattr(result, "observations", [])}
+        missing = [o for o in task.expected_outputs if o not in observed_topics]
+        if missing:
+            return QualifyVerdict(passed=False, gap=f"Missing outputs: {', '.join(missing)}")
+        return QualifyVerdict(passed=True)
+
+    def route_failure(self, task: Task, error: TaskError) -> None:
+        """Classify failure and emit appropriate mark."""
+        from markspace import Need, Warning as MarkWarning
+        if error.error_type in ("scope_creep", "dependency_missing", "compliance_violation"):
+            self.markspace.write(
+                self.agent,
+                Need(
+                    scope="paul",
+                    question=f"Task '{task.id}' failed ({error.error_type}): {error.detail}",
+                    context={"task_id": task.id, "error_type": error.error_type},
+                    priority=0.8,
+                    blocking=error.error_type == "dependency_missing",
+                ),
+            )
+        else:
+            self.markspace.write(
+                self.agent,
+                MarkWarning(
+                    scope="paul",
+                    topic="task-failure",
+                    reason=f"Task '{task.id}' agent error: {error.detail}",
+                ),
+            )
+
+    def enforce_scope(self, session: Any, milestone: Milestone) -> None:
+        """Set the session's scope to the milestone ID to enforce absorbing barriers."""
+        session.scope = f"paul.{milestone.id}"
+
     def run(self, milestones: list[Milestone], session: Any) -> Summary:
         """Full Plan → Apply → Unify loop."""
         plan = self.plan(milestones)

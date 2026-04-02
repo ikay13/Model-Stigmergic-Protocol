@@ -7,7 +7,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from msp.layer5.paul import (
-    Milestone, Plan, Task, Result, Summary, PlanApplyUnify
+    Milestone, Plan, Task, Result, Summary, PlanApplyUnify,
+    QualifyVerdict, TaskError,
 )
 from msp.layer5.base import WorkspaceState
 
@@ -128,3 +129,54 @@ def test_run_always_produces_summary(tmp_path, n_milestones):
         summary = paul.run(milestones, mock_session)
         assert isinstance(summary, Summary)
         assert (root / "paul" / "SUMMARY.md").exists()
+
+
+# Task 8: PAUL full — qualify loop, diagnostic routing, scope enforcement
+
+def test_qualify_passes_when_outputs_present(paul):
+    task = Task(id="t1", milestone_id="m1", description="Build X", expected_outputs=["workspace.json"])
+    result = MagicMock()
+    result.observations = [{"topic": "workspace.json", "content": {}}]
+    verdict = paul.qualify(task, result)
+    assert verdict.passed is True
+
+
+def test_qualify_fails_when_expected_outputs_missing(paul):
+    task = Task(id="t1", milestone_id="m1", description="Build X", expected_outputs=["workspace.json"])
+    result = MagicMock()
+    result.observations = []
+    verdict = paul.qualify(task, result)
+    assert verdict.passed is False
+    assert "workspace.json" in verdict.gap
+
+
+def test_route_failure_scope_creep_emits_need(paul):
+    from markspace import Need
+    task = Task(id="t1", milestone_id="m1", description="Do X")
+    error = TaskError(task=task, error_type="scope_creep", detail="added unrequested feature")
+    paul.markspace.write.reset_mock()
+    paul.route_failure(task, error)
+    calls = paul.markspace.write.call_args_list
+    need_calls = [c for c in calls if isinstance(c.args[1], Need)]
+    assert len(need_calls) == 1
+
+
+def test_route_failure_dependency_missing_emits_need(paul):
+    from markspace import Need
+    task = Task(id="t1", milestone_id="m1", description="Do X")
+    error = TaskError(task=task, error_type="dependency_missing", detail="missing base module")
+    paul.route_failure(task, error)
+    calls = paul.markspace.write.call_args_list
+    need_calls = [c for c in calls if isinstance(c.args[1], Need)]
+    assert len(need_calls) >= 1
+
+
+def test_route_failure_agent_error_emits_warning(paul):
+    from markspace import Warning
+    task = Task(id="t1", milestone_id="m1", description="Do X")
+    error = TaskError(task=task, error_type="agent_error", detail="timeout")
+    paul.markspace.write.reset_mock()
+    paul.route_failure(task, error)
+    calls = paul.markspace.write.call_args_list
+    warn_calls = [c for c in calls if isinstance(c.args[1], Warning)]
+    assert len(warn_calls) >= 1
