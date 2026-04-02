@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from markspace import Agent, MarkSpace, Observation, Source
+from markspace import Agent, Intent, MarkSpace, Observation, Source
 from msp.layer4.vault_sync import VaultSync
 
 
@@ -37,13 +37,16 @@ class WorkspaceState:
         root:      Parent directory; files go in root/base/.
         markspace: Shared MarkSpace instance.
         vault:     VaultSync instance for PSMM export.
-        agent:     Authorized Agent for writing marks. Auto-created if None.
+        agent:     Authorized Agent for writing marks.
+        scope:     Mark scope string (default "base").
     """
     project: str
     root: Path
     markspace: MarkSpace
     vault: VaultSync
-    agent: Agent | None = None
+    agent: Agent
+    scope: str = "base"
+    _base_dir: Path = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._base_dir = self.root / "base"
@@ -66,24 +69,22 @@ class WorkspaceState:
     def save(self, data: dict) -> None:
         """Write workspace.json and emit an Observation mark."""
         self._write_json("workspace.json", data)
-        if self.agent is not None:
-            self.markspace.write(
-                self.agent,
-                Observation(
-                    scope="base",
-                    topic="workspace-saved",
-                    content={"project": self.project},
-                    confidence=1.0,
-                    source=Source.FLEET,
-                ),
-            )
+        self.markspace.write(
+            self.agent,
+            Observation(
+                scope=self.scope,
+                topic="workspace-saved",
+                content={"project": self.project},
+                confidence=1.0,
+                source=Source.FLEET,
+            ),
+        )
 
     def detect_drift(self) -> list[DriftItem]:
         """Compare workspace.json against markspace Intent mark count."""
-        from markspace import Intent
         workspace = self.load()
         recorded = workspace.get("active_intents", 0)
-        live_marks = self.markspace.read(scope="base")
+        live_marks = self.markspace.read(scope=self.scope)
         live_intents = sum(1 for m in live_marks if isinstance(m, Intent))
 
         items: list[DriftItem] = []
@@ -94,17 +95,16 @@ class WorkspaceState:
                 markspace_value=live_intents,
             )
             items.append(item)
-            if self.agent is not None:
-                self.markspace.write(
-                    self.agent,
-                    Observation(
-                        scope="base",
-                        topic="workspace-drift",
-                        content={"key": item.key, "workspace": recorded, "live": live_intents},
-                        confidence=0.9,
-                        source=Source.FLEET,
-                    ),
-                )
+            self.markspace.write(
+                self.agent,
+                Observation(
+                    scope=self.scope,
+                    topic="workspace-drift",
+                    content={"key": item.key, "workspace": recorded, "live": live_intents},
+                    confidence=0.9,
+                    source=Source.FLEET,
+                ),
+            )
         return items
 
     def psmm_read(self) -> dict:
@@ -114,4 +114,4 @@ class WorkspaceState:
     def psmm_write(self, session_data: dict) -> None:
         """Write psmm.json and export to Obsidian vault."""
         self._write_json("psmm.json", session_data)
-        self.vault.export_observations("base")
+        self.vault.export_observations(self.scope)

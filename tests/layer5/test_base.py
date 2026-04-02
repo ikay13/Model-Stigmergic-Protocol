@@ -18,7 +18,7 @@ def _make_state(workspace_dir, markspace=None, vault=None):
     from unittest.mock import MagicMock
     ms = markspace or MagicMock()
     v = vault or MagicMock()
-    return WorkspaceState(project="myproject", root=workspace_dir, markspace=ms, vault=v)
+    return WorkspaceState(project="myproject", root=workspace_dir, markspace=ms, vault=v, agent=MagicMock())
 
 
 def test_workspace_load_returns_empty_dict_when_no_file(workspace_dir):
@@ -48,6 +48,10 @@ def test_workspace_save_emits_observation_mark(workspace_dir):
     state = WorkspaceState(project="myproject", root=workspace_dir, markspace=ms, vault=MagicMock(), agent=agent)
     state.save({"x": 1})
     assert ms.write.called
+    obs = ms.write.call_args[0][1]
+    assert obs.scope == "base"
+    assert obs.topic == "workspace-saved"
+    assert obs.content["project"] == "myproject"
 
 
 def test_psmm_read_returns_empty_when_no_file(workspace_dir):
@@ -75,3 +79,53 @@ def test_drift_item_dataclass():
     assert item.key == "task_count"
     assert item.workspace_value == 3
     assert item.markspace_value == 5
+
+
+def test_detect_drift_no_drift_when_counts_match(tmp_path):
+    from unittest.mock import MagicMock
+    from markspace import Intent
+    ms = MagicMock()
+    ms.read.return_value = [MagicMock(spec=Intent), MagicMock(spec=Intent)]
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=MagicMock())
+    state.save({"active_intents": 2})
+    items = state.detect_drift()
+    assert items == []
+
+
+def test_detect_drift_returns_item_when_counts_differ(tmp_path):
+    from unittest.mock import MagicMock
+    from markspace import Intent
+    ms = MagicMock()
+    ms.read.return_value = [MagicMock(spec=Intent)]
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=MagicMock())
+    state.save({"active_intents": 0})
+    items = state.detect_drift()
+    assert len(items) == 1
+    assert items[0].key == "active_intents"
+
+
+def test_detect_drift_emits_observation_mark_on_drift(tmp_path):
+    from unittest.mock import MagicMock
+    from markspace import Intent, Observation
+    ms = MagicMock()
+    ms.read.return_value = [MagicMock(spec=Intent)]
+    agent = MagicMock()
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=agent)
+    state.save({"active_intents": 0})
+    ms.write.reset_mock()
+    state.detect_drift()
+    assert ms.write.called
+    obs = ms.write.call_args[0][1]
+    assert obs.topic == "workspace-drift"
+
+
+def test_detect_drift_no_mark_when_no_drift(tmp_path):
+    from unittest.mock import MagicMock
+    from markspace import Intent
+    ms = MagicMock()
+    ms.read.return_value = []
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=MagicMock())
+    state.save({"active_intents": 0})
+    ms.write.reset_mock()
+    state.detect_drift()
+    assert not ms.write.called
