@@ -1,7 +1,6 @@
 # Model Stigmergic Protocol (MSP)
 
-<!-- Hero image: replace with Nano Banana 2 generated image -->
-<p align="center"><img src="figures/psa.jpg" alt="MSP hero image" width="900"></p>
+<p align="center"><img src="figures/msp_hero.jpeg" alt="MSP — bio-governed multi-agent coordination infrastructure" width="900"></p>
 
 > Bio-governed multi-agent coordination infrastructure.
 > Agents don't talk to each other. They leave marks.
