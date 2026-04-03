@@ -266,6 +266,17 @@ If you use MSP or the markspace coordination core in your research, please cite:
 
 ```bibtex
 @software{markspace2026,
+  title     = {Model-Stigmergic-Protocol},
+  author    = {Kay, James Isaac},
+  year      = {2026},
+  version   = {0.1.0-alpha},
+  url       = {https://github.com/ikay13/Model-Stigmergic-Protocol},
+  license   = {MIT}
+}
+```
+
+```bibtex
+@software{markspace2026,
   title     = {markspace},
   author    = {Loose, Andre},
   year      = {2026},
