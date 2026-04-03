@@ -35,6 +35,8 @@ class Task:
     milestone_id: str
     description: str
     expected_outputs: list[str] = field(default_factory=list)
+    provider: str = "claude"  # which agent session handles this task
+    stage: str | None = None  # ICM stage name to load; None = full workspace context
 
 
 @dataclass
@@ -127,14 +129,25 @@ class PlanApplyUnify:
 
         return plan
 
-    def apply(self, plan: Plan, session: Any) -> Result:
-        """Execute each task via the session and emit one Action mark per completion."""
+    def apply(self, plan: Plan, sessions: Any) -> Result:
+        """Execute each task via the appropriate session and emit one Action mark per completion.
+
+        Args:
+            plan:     The Plan to execute.
+            sessions: Either a single session (used for all tasks) or a dict mapping
+                      provider name → AgentSession. Tasks are routed by task.provider;
+                      falls back to "claude" if the provider isn't in the dict.
+        """
         completed: list[Task] = []
         failed: list[Task] = []
 
         for task in plan.tasks:
+            if isinstance(sessions, dict):
+                session = sessions.get(task.provider) or sessions.get("claude")
+            else:
+                session = sessions
             try:
-                session.run(stage=task.id)
+                session.run(stage=task.stage if hasattr(task, "stage") and task.stage else None)
                 completed.append(task)
                 self.markspace.write(
                     self.agent,
@@ -236,8 +249,8 @@ class PlanApplyUnify:
         """Set the session's scope to the milestone ID to enforce absorbing barriers."""
         session.scope = f"paul.{milestone.id}"
 
-    def run(self, milestones: list[Milestone], session: Any) -> Summary:
+    def run(self, milestones: list[Milestone], sessions: Any) -> Summary:
         """Full Plan → Apply → Unify loop."""
         plan = self.plan(milestones)
-        result = self.apply(plan, session)
+        result = self.apply(plan, sessions)
         return self.unify(plan, result)
