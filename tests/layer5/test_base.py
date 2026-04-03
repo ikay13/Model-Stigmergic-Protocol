@@ -153,3 +153,47 @@ def test_drift_detected_whenever_counts_differ(tmp_path, recorded, live):
         assert items[0].key == "active_intents"
     else:
         assert items == []
+
+
+def test_psmm_snapshot_writes_structured_dict(tmp_path):
+    """psmm_snapshot() writes a fully structured PSMM dict and returns it."""
+    from unittest.mock import MagicMock
+    from markspace import MarkSpace, Scope, DecayConfig, Agent
+    scope = Scope(name="base", observation_topics=["*"], decay=DecayConfig(observation_half_life=3600.0, warning_half_life=3600.0, intent_ttl=1800.0))
+    ms = MarkSpace(scopes=[scope])
+    agent = Agent(name="test-agent", scopes={"base": ["observation"]})
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=agent, scope="base")
+
+    result = state.psmm_snapshot(
+        session_id="agent://ikay13/msp/claude-01",
+        completed_tasks=["t1", "t2"],
+        next_steps=["do AEGIS"],
+        open_needs=["Which analyzer?"],
+        agent_notes="test note",
+    )
+
+    assert result["session_id"] == "agent://ikay13/msp/claude-01"
+    assert result["completed_tasks"] == ["t1", "t2"]
+    assert result["next_steps"] == ["do AEGIS"]
+    assert result["open_needs"] == ["Which analyzer?"]
+    assert result["agent_notes"] == "test note"
+    assert "timestamp" in result
+    assert "mark_summary" in result
+    # Verify it was persisted
+    assert state.psmm_read()["session_id"] == "agent://ikay13/msp/claude-01"
+
+
+def test_psmm_snapshot_counts_live_marks(tmp_path):
+    """psmm_snapshot() mark_summary reflects live markspace state."""
+    from unittest.mock import MagicMock
+    from markspace import MarkSpace, Scope, DecayConfig, Agent, Observation, Source
+    scope = Scope(name="base", observation_topics=["*"], decay=DecayConfig(observation_half_life=3600.0, warning_half_life=3600.0, intent_ttl=1800.0))
+    ms = MarkSpace(scopes=[scope])
+    agent = Agent(name="test-agent", scopes={"base": ["observation"]})
+    state = WorkspaceState(project="p", root=tmp_path, markspace=ms, vault=MagicMock(), agent=agent, scope="base")
+
+    ms.write(agent, Observation(scope="base", topic="t", content={}, confidence=1.0, source=Source.FLEET))
+    ms.write(agent, Observation(scope="base", topic="t2", content={}, confidence=0.9, source=Source.FLEET))
+
+    result = state.psmm_snapshot(session_id="agent://ikay13/msp/claude-01")
+    assert result["mark_summary"]["observations"] == 2

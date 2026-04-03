@@ -115,3 +115,42 @@ class WorkspaceState:
         """Write psmm.json and export to Obsidian vault."""
         self._write_json("psmm.json", session_data)
         self.vault.export_observations(self.scope)
+
+    def psmm_snapshot(
+        self,
+        session_id: str,
+        completed_tasks: list[str] | None = None,
+        next_steps: list[str] | None = None,
+        open_needs: list[str] | None = None,
+        agent_notes: str = "",
+    ) -> dict:
+        """Build a PSMM dict from current markspace state and write it.
+
+        Counts live marks in self.scope to populate mark_summary.
+        Returns the written dict.
+        """
+        import datetime
+
+        try:
+            marks = self.markspace.read(scope=self.scope)
+        except Exception:
+            marks = []
+
+        mark_summary = {
+            "observations": sum(1 for m in marks if type(m).__name__ == "Observation"),
+            "intents": sum(1 for m in marks if type(m).__name__ == "Intent"),
+            "actions": sum(1 for m in marks if type(m).__name__ == "Action"),
+        }
+
+        data = {
+            "session_id": session_id,
+            "timestamp": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "scope": self.scope,
+            "completed_tasks": completed_tasks or [],
+            "next_steps": next_steps or [],
+            "open_needs": open_needs or [],
+            "mark_summary": mark_summary,
+            "agent_notes": agent_notes,
+        }
+        self.psmm_write(data)
+        return data
